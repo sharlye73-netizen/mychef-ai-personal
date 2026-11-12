@@ -44,6 +44,11 @@
       reason:'זו נקודת פתיחה למתכונים אפויים: אלולוז מתוק פחות מסוכר ועלול להשחים יותר, לכן פועלים לפי הוראות המוצר ומתאימים את המתכון בזהירות.',
       limitation:'מחקרים מצביעים על תגובת גלוקוז נמוכה יותר בתנאים מסוימים, אך זה אינו מבטיח תגובה אישית או התאמה לכל מתכון. אין יחס החלפה קבוע; בדקו גם את תווית המוצר.'
     };
+    if(/^(סילאן|סירופ תמרים|date syrup|date molasses|maple syrup|סירופ מייפל|מייפל)$/.test(name)) return {
+      ingredient:String(ingredient), options:['סירופ על בסיס אלולוז (לבדיקת תווית המוצר)','ממתיק ללא סוכר יחד עם התאמת הנוזלים במתכון'], recommended:'אין המלצה אחת בטוחה בלי לבדוק את כל המתכון',
+      reason:'סילאן ומייפל מוסיפים גם מתיקות וגם נוזלים. החלפה תשפיע על הטעם, הלחות והמרקם, ולכן לא נחליף אותם אוטומטית.',
+      limitation:'אלה כיוונים לבדיקה בלבד, לא יחסי החלפה. צריך להתאים לפי הרכיבים ושלבי ההכנה, ואז לאשר את הגרסה. ההעדפה האישית שלך נשמרת בלי לטעון טענה רפואית.'
+    };
     const isFlour=/^קמח(?: לבן| רגיל| חיטה| תופח| .+ לבן)?$/.test(name)||/^(white|all-purpose) flour$/.test(name);
     if(isFlour){
       const savory=['בשרים','דגים','ארוחות','מאפים'].includes(category);
@@ -55,6 +60,17 @@
       };
     }
     return null;
+  }
+  const AVOIDABLE_INGREDIENTS=[
+    {key:'סוכר לבן',pattern:/^(סוכר|סוכר לבן|סוכר רגיל|white sugar|granulated sugar)$/i},
+    {key:'קמח לבן',pattern:/^(קמח לבן|קמח רגיל|קמח חיטה לבן|white flour|all-purpose flour)$/i},
+    {key:'סילאן',pattern:/^(סילאן|סירופ תמרים|date syrup|date molasses)$/i},
+    {key:'מייפל',pattern:/^(מייפל|סירופ מייפל|maple syrup)$/i}
+  ];
+  function matchAvoidedIngredient(ingredient,preferences=[]){
+    const name=String(ingredient||'').trim();
+    const selected=new Set(Array.isArray(preferences)?preferences:[]);
+    return AVOIDABLE_INGREDIENTS.find(item=>selected.has(item.key)&&item.pattern.test(name))?.key||null;
   }
   function appendVersion(versions, date, note, snapshot){
     const previous=Array.isArray(versions)?versions:[];
@@ -87,7 +103,7 @@
     if(typeof payload.data.profile.name!=='string' || typeof payload.data.profile.preferences!=='string' || payload.data.profile.name.length>200 || payload.data.profile.preferences.length>10000) return {ok:false,reason:'העדפות המשתמש בקובץ הגיבוי אינן תקינות.'};
     return {ok:true,data:payload.data};
   }
-  const api={scaleAmount,parseIngredientLines,parseTimerVoiceCommand,recommendIngredientAlternatives,appendVersion,formatClock,escapeHTML,createBackup,validateBackup};
+  const api={scaleAmount,parseIngredientLines,parseTimerVoiceCommand,recommendIngredientAlternatives,matchAvoidedIngredient,appendVersion,formatClock,escapeHTML,createBackup,validateBackup};
   root.MyChefDomain=api;
   if(typeof module!=='undefined'&&module.exports) module.exports=api;
 })(globalThis);
