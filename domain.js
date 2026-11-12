@@ -5,6 +5,33 @@
     const result=Number(amount)*Number(targetServings)/Number(originalServings);
     return Number.isInteger(result)?result:Number(result.toFixed(1));
   }
+  function estimateNutrition(ingredients,targetServings,catalog=root.MyChefNutritionData){
+    if(!Array.isArray(ingredients)) throw new TypeError('ingredients must be an array');
+    if(!Number.isFinite(Number(targetServings))||Number(targetServings)<=0) throw new RangeError('servings must be positive');
+    const foods=Array.isArray(catalog?.foods)?catalog.foods:[];
+    const normalize=value=>String(value||'').toLowerCase().replace(/[\u0591-\u05C7]/g,'').replace(/[.,:;()]/g,' ').replace(/\s+/g,' ').trim();
+    const gramsUnits=new Set(['g','gram','grams','גרם','גר']);
+    const totals={kcal:0,protein:0,carbs:0,fat:0,fiber:0};
+    const included=[],missing=[];
+    for(const ingredient of ingredients){
+      const name=String(ingredient?.name||'').trim();
+      const food=foods.find(item=>[item.name,...(item.aliases||[])].some(alias=>normalize(alias)===normalize(name)));
+      if(!food){missing.push({name,reason:'אין התאמה חד-משמעית במאגר המקומי.'});continue;}
+      const unit=normalize(ingredient?.unit);
+      const amount=Number(ingredient?.amount);
+      if(!gramsUnits.has(unit)){missing.push({name,reason:'הכמות לא נמדדה בגרמים; לא בוצעה המרה.'});continue;}
+      if(!Number.isFinite(amount)||amount<=0){missing.push({name,reason:'חסרה כמות מדויקת בגרמים.'});continue;}
+      const values=['kcal','protein','carbs','fat','fiber'];
+      if(values.some(key=>!Number.isFinite(food[key])||food[key]<0)){missing.push({name,reason:'חסרים ערכים תזונתיים תקינים במאגר.'});continue;}
+      const scale=amount/100;
+      values.forEach(key=>totals[key]+=food[key]*scale);
+      included.push({name,food:food.name,sourceId:food.id,amount,unit:'גרם'});
+    }
+    const round=value=>Number(value.toFixed(1));
+    const rounded=Object.fromEntries(Object.entries(totals).map(([key,value])=>[key,round(value)]));
+    const perServing=Object.fromEntries(Object.entries(rounded).map(([key,value])=>[key,round(value/Number(targetServings))]));
+    return {totals:rounded,perServing,included,missing,ingredientCount:ingredients.length,coveredCount:included.length,coverage:ingredients.length?included.length/ingredients.length:0,source:catalog?.version||'מאגר מקומי'};
+  }
   function parseIngredientLines(text){
     return String(text||'').split('\n').map((x,index)=>({line:x.trim(),number:index+1})).filter(x=>x.line).map(({line,number})=>{
       const parts=line.split('|').map(x=>x.trim());
@@ -109,7 +136,7 @@
     if(typeof payload.data.profile.name!=='string' || typeof payload.data.profile.preferences!=='string' || payload.data.profile.name.length>200 || payload.data.profile.preferences.length>10000) return {ok:false,reason:'העדפות המשתמש בקובץ הגיבוי אינן תקינות.'};
     return {ok:true,data:payload.data};
   }
-  const api={scaleAmount,parseIngredientLines,validateLocalVideoFile,parseTimerVoiceCommand,recommendIngredientAlternatives,matchAvoidedIngredient,appendVersion,formatClock,escapeHTML,createBackup,validateBackup};
+  const api={scaleAmount,estimateNutrition,parseIngredientLines,validateLocalVideoFile,parseTimerVoiceCommand,recommendIngredientAlternatives,matchAvoidedIngredient,appendVersion,formatClock,escapeHTML,createBackup,validateBackup};
   root.MyChefDomain=api;
   if(typeof module!=='undefined'&&module.exports) module.exports=api;
 })(globalThis);

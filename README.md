@@ -1,7 +1,16 @@
 # MyChef AI
 
-A Hebrew, right-to-left, local-first recipe PWA for personal use. Recipe data is stored in the browser on the device; it is not synced to this repository.
+Personal Hebrew, right-to-left recipe PWA. Version 0.4.0.
 
-The application currently provides manual recipes, local storage, timers and basic transparent substitution rules. Photo OCR, food-image ingredient inference, recipe text extraction and video analysis are not yet implemented. No external AI service is configured.
+## Current capabilities
+- Local recipe book, manual editing, version history, backups, timers and cooking mode.
+- Personal ingredient preferences remain on this device.
+- A small offline nutrition catalog estimates calories, protein, carbohydrates, fat and fiber for exact supported foods measured in grams. Unknown foods and unsupported units are excluded and shown as missing.
+- Video files are previewed locally; only a user-selected still frame may be saved with a recipe. No video or image AI analysis is active.
 
-To install, open the deployed HTTPS site on the phone. On iPhone, use Safari Share > Add to Home Screen. On Android, use Chrome's Install app / Add to Home screen option. Each device stores its own recipes separately.
+## Install
+Open the hosted HTTPS app in Safari on iPhone, then choose Share > Add to Home Screen. On Android, open it in Chrome and choose Install app / Add to Home screen.
+
+Recipes, photos and preferences are stored locally in the browser and are not synchronized to this repository. The nutrition values are generic estimates, not measurements or medical advice.
+
+Nutrition data source: [USDA FoodData Central](https://fdc.nal.usda.gov/), public-domain data (CC0). The app uses a limited bundled subset and makes no nutrition API requests.
