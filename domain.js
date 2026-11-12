@@ -25,12 +25,57 @@
       if(values.some(key=>!Number.isFinite(food[key])||food[key]<0)){missing.push({name,reason:'חסרים ערכים תזונתיים תקינים במאגר.'});continue;}
       const scale=amount/100;
       values.forEach(key=>totals[key]+=food[key]*scale);
-      included.push({name,food:food.name,sourceId:food.id,amount,unit:'גרם'});
+      included.push({name,food:food.name,sourceId:food.id,sourceLabel:food.sourceLabel||food.id,amount,unit:'גרם'});
     }
     const round=value=>Number(value.toFixed(1));
     const rounded=Object.fromEntries(Object.entries(totals).map(([key,value])=>[key,round(value)]));
     const perServing=Object.fromEntries(Object.entries(rounded).map(([key,value])=>[key,round(value/Number(targetServings))]));
     return {totals:rounded,perServing,included,missing,ingredientCount:ingredients.length,coveredCount:included.length,coverage:ingredients.length?included.length/ingredients.length:0,source:catalog?.version||'מאגר מקומי'};
+  }
+  function normalizeFoodName(value){return String(value||'').toLowerCase().replace(/[\u0591-\u05C7]/g,'').replace(/[.,:;()]/g,' ').replace(/\s+/g,' ').trim()}
+  function validateCustomNutritionFood(input){
+    if(!input||typeof input.name!=='string') return {ok:false,reason:'צריך לכתוב את שם המזון כפי שמופיע ברכיב.'};
+    const name=input.name.trim();
+    if(!name||name.length>120) return {ok:false,reason:'שם המזון צריך להכיל עד 120 תווים.'};
+    const fields=['kcal','protein','carbs','fat','fiber'];
+    const food={name};
+    for(const key of fields){
+      const raw=input[key];
+      if(raw===undefined||raw===null||String(raw).trim()==='') return {ok:false,reason:'צריך למלא את כל הערכים התזונתיים ל-100 גרם.'};
+      const value=typeof raw==='number'?raw:Number(String(raw).replace(',','.'));
+      const max=key==='kcal'?1000:100;
+      if(!Number.isFinite(value)||value<0||value>max) return {ok:false,reason:'הערכים צריכים להיות מספרים תקינים ולא שליליים. ערכי חלבון, פחמימות, שומן וסיבים מוגבלים ל-100 גרם ל-100 גרם מזון.'};
+      food[key]=value;
+    }
+    food.id=typeof input.id==='string'&&input.id.length<=180?input.id:`label:${normalizeFoodName(name)}`;
+    food.aliases=[name];
+    food.sourceLabel='תווית שהוזנה במכשיר';
+    food.basis='100 גרם, לפי תווית שהוזנה';
+    return {ok:true,food};
+  }
+  function normalizeCustomNutritionFoods(list){
+    if(!Array.isArray(list)) return [];
+    const normalized=[],seen=new Set();
+    for(const item of list){
+      const result=validateCustomNutritionFood(item);
+      if(!result.ok) continue;
+      const key=normalizeFoodName(result.food.name);
+      if(seen.has(key)) continue;
+      seen.add(key);normalized.push(result.food);
+    }
+    return normalized;
+  }
+  function upsertCustomNutritionFood(list,input,idFactory){
+    const current=normalizeCustomNutritionFoods(list);
+    const result=validateCustomNutritionFood(input);
+    if(!result.ok) return result;
+    const key=normalizeFoodName(result.food.name);
+    const index=current.findIndex(food=>normalizeFoodName(food.name)===key);
+    if(index<0&&current.length>=500) return {ok:false,reason:'נשמרו כבר 500 מזונות מותאמים. אפשר לייצא גיבוי לפני שמפנים מקום.'};
+    result.food.id=index>=0?current[index].id:(typeof idFactory==='function'?idFactory():result.food.id);
+    const foods=[...current];
+    if(index>=0) foods[index]=result.food; else foods.push(result.food);
+    return {ok:true,foods,updated:index>=0};
   }
   function parseIngredientLines(text){
     return String(text||'').split('\n').map((x,index)=>({line:x.trim(),number:index+1})).filter(x=>x.line).map(({line,number})=>{
@@ -134,9 +179,15 @@
       if(r.versions.some(v=>{if(!v || !Number.isInteger(v.number) || v.number<1 || typeof v.date!=='string' || typeof v.note!=='string' || v.note.length>500)return true;if(v.snapshot){const x=v.snapshot;if(typeof x!=='object'||typeof x.name!=='string'||typeof x.category!=='string'||!Number.isFinite(x.servings)||x.servings<1||!Array.isArray(x.ingredients)||!Array.isArray(x.steps)||x.ingredients.some(i=>!i||typeof i.name!=='string'||!Number.isFinite(i.amount)||i.amount<0||typeof i.unit!=='string'||(i.alternatives!==undefined&&(!Array.isArray(i.alternatives)||i.alternatives.length>2||i.alternatives.some(a=>typeof a!=='string'||!a.trim()||a.length>200))))||x.steps.some(step=>typeof step!=='string'))return true;}return false;})) return {ok:false,reason:'קובץ הגיבוי מכיל היסטוריית גרסאות לא תקינה.'};
     }
     if(typeof payload.data.profile.name!=='string' || typeof payload.data.profile.preferences!=='string' || payload.data.profile.name.length>200 || payload.data.profile.preferences.length>10000) return {ok:false,reason:'העדפות המשתמש בקובץ הגיבוי אינן תקינות.'};
+    if(payload.data.profile.customNutritionFoods!==undefined){
+      const foods=payload.data.profile.customNutritionFoods;
+      if(!Array.isArray(foods)||foods.length>500||foods.some(food=>!validateCustomNutritionFood(food).ok)) return {ok:false,reason:'קובץ הגיבוי מכיל ערכי תזונה מותאמים שאינם תקינים.'};
+      const names=foods.map(food=>normalizeFoodName(food.name));
+      if(new Set(names).size!==names.length) return {ok:false,reason:'קובץ הגיבוי מכיל שמות מזון כפולים.'};
+    }
     return {ok:true,data:payload.data};
   }
-  const api={scaleAmount,estimateNutrition,parseIngredientLines,validateLocalVideoFile,parseTimerVoiceCommand,recommendIngredientAlternatives,matchAvoidedIngredient,appendVersion,formatClock,escapeHTML,createBackup,validateBackup};
+  const api={scaleAmount,estimateNutrition,normalizeCustomNutritionFoods,validateCustomNutritionFood,upsertCustomNutritionFood,parseIngredientLines,validateLocalVideoFile,parseTimerVoiceCommand,recommendIngredientAlternatives,matchAvoidedIngredient,appendVersion,formatClock,escapeHTML,createBackup,validateBackup};
   root.MyChefDomain=api;
   if(typeof module!=='undefined'&&module.exports) module.exports=api;
 })(globalThis);
