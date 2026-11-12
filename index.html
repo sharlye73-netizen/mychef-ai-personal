@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#f7f5ef">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="MyChef">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+  <meta name="description" content="MyChef AI - ספר המתכונים הביתי והחכם שלכם">
+  <meta name="robots" content="noindex,nofollow">
+  <meta name="referrer" content="no-referrer">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' blob: data:; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="stylesheet" href="styles.css">
+  <title>MyChef AI | המטבח שלנו</title>
+</head>
+<body>
+  <header class="topbar">
+    <div><p class="eyebrow">ספר המתכונים הביתי</p><h1 id="page-title">המטבח שלנו</h1></div>
+    <button class="avatar" data-view="profile" aria-label="האזור האישי">מ</button>
+  </header>
+  <main id="app" class="app-shell" aria-live="polite"></main>
+  <nav class="tabbar" aria-label="ניווט ראשי">
+    <button class="tab active" data-view="home"><span>⌂</span><small>בית</small></button>
+    <button class="tab" data-view="book"><span>▤</span><small>הספר שלנו</small></button>
+    <button class="tab add-tab" data-view="add"><span>＋</span><small>מתכון חדש</small></button>
+    <button class="tab" data-view="cooking"><span>♨</span><small>במטבח</small></button>
+    <button class="tab" data-view="profile"><span>◯</span><small>שלי</small></button>
+  </nav>
+  <dialog id="notice" class="notice"><p id="notice-text"></p><button class="primary" id="notice-close">הבנתי</button></dialog>
+  <script src="domain.js" defer></script>
+  <script src="storage.js" defer></script>
+  <script src="app.js" defer></script>
+</body>
+</html>
