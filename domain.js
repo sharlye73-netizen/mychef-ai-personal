@@ -22,6 +22,12 @@
       return ingredient;
     });
   }
+  function validateLocalVideoFile(file,maxBytes=100*1024*1024){
+    if(!file||typeof file.type!=='string'||!file.type.startsWith('video/')) return {ok:false,reason:'אפשר לבחור קובץ וידאו בלבד.'};
+    if(!Number.isFinite(file.size)||file.size<=0) return {ok:false,reason:'קובץ הווידאו ריק או לא תקין.'};
+    if(file.size>maxBytes) return {ok:false,reason:'הסרטון גדול מ-100MB. אפשר לבחור סרטון קצר יותר.'};
+    return {ok:true};
+  }
   function parseTimerVoiceCommand(text){
     const normalized=String(text||'').toLowerCase().replace(/[\u0591-\u05C7]/g,'').replace(/[?!.,־-]/g,' ').replace(/\s+/g,' ').trim();
     if(/(כמה זמן נשאר|מה נשאר בטיימר|מה מצב הטיימר|כמה נשאר)/.test(normalized)) return {action:'status'};
@@ -103,7 +109,7 @@
     if(typeof payload.data.profile.name!=='string' || typeof payload.data.profile.preferences!=='string' || payload.data.profile.name.length>200 || payload.data.profile.preferences.length>10000) return {ok:false,reason:'העדפות המשתמש בקובץ הגיבוי אינן תקינות.'};
     return {ok:true,data:payload.data};
   }
-  const api={scaleAmount,parseIngredientLines,parseTimerVoiceCommand,recommendIngredientAlternatives,matchAvoidedIngredient,appendVersion,formatClock,escapeHTML,createBackup,validateBackup};
+  const api={scaleAmount,parseIngredientLines,validateLocalVideoFile,parseTimerVoiceCommand,recommendIngredientAlternatives,matchAvoidedIngredient,appendVersion,formatClock,escapeHTML,createBackup,validateBackup};
   root.MyChefDomain=api;
   if(typeof module!=='undefined'&&module.exports) module.exports=api;
 })(globalThis);
