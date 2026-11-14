@@ -100,6 +100,16 @@
     if(file.size>maxBytes) return {ok:false,reason:'הסרטון גדול מ-100MB. אפשר לבחור סרטון קצר יותר.'};
     return {ok:true};
   }
+  function validateLocalImageFile(file,maxBytes=15*1024*1024){
+    if(!file||typeof file.type!=='string'||!file.type.startsWith('image/')) return {ok:false,reason:'אפשר לבחור קובץ תמונה בלבד.'};
+    if(!Number.isFinite(file.size)||file.size<=0) return {ok:false,reason:'קובץ התמונה ריק או לא תקין.'};
+    if(file.size>maxBytes) return {ok:false,reason:'התמונה גדולה מ-15MB. אפשר לבחור תמונה קטנה יותר.'};
+    return {ok:true};
+  }
+  function validateStepPhotos(photos,stepCount){
+    if(!Array.isArray(photos)||photos.length>100)return false;
+    return photos.every(photo=>photo&&Number.isInteger(photo.stepIndex)&&photo.stepIndex>=0&&photo.stepIndex<stepCount&&typeof photo.dataUrl==='string'&&photo.dataUrl.length<=8*1024*1024&&/^data:image\/(?:jpeg|png|webp);base64,[A-Za-z0-9+/]+={0,2}$/.test(photo.dataUrl)&&typeof photo.createdAt==='string'&&!Number.isNaN(Date.parse(photo.createdAt)));
+  }
   function parseTimerVoiceCommand(text){
     const normalized=String(text||'').toLowerCase().replace(/[\u0591-\u05C7]/g,'').replace(/[?!.,־-]/g,' ').replace(/\s+/g,' ').trim();
     if(/(כמה זמן נשאר|מה נשאר בטיימר|מה מצב הטיימר|כמה נשאר)/.test(normalized)) return {action:'status'};
@@ -114,6 +124,16 @@
     const seconds=count*factor;
     if(seconds>86400) return null;
     return {action:'start-timer',seconds};
+  }
+  function parseCookingAssistantCommand(text){
+    const normalized=String(text||'').toLowerCase().replace(/[\u0591-\u05C7]/g,'').replace(/[?!.,־-]/g,' ').replace(/\s+/g,' ').trim();
+    if(/(מה השלב הבא|מה עושים אחר כך|מה אחר כך)/.test(normalized))return {type:'next-step-info'};
+    if(/(מה עושים עכשיו|מה השלב הנוכחי|חזור על השלב|תחזור על השלב|תחזור על ההוראות|מה לעשות עכשיו|הקרא לי את השלב)/.test(normalized))return {type:'current-step'};
+    if(/^(הבא|השלב הבא|תעביר לשלב הבא|עבור לשלב הבא|אפשר להמשיך)$/.test(normalized))return {type:'next-step'};
+    if(/^(הקודם|השלב הקודם|תחזור שלב|חזור שלב|שלב קודם)$/.test(normalized))return {type:'previous-step'};
+    const timer=parseTimerVoiceCommand(text);
+    if(timer)return {type:'timer',...timer};
+    return {type:'help'};
   }
   function recommendIngredientAlternatives(ingredient,category=''){
     const name=String(ingredient||'').trim().toLowerCase();
@@ -156,6 +176,22 @@
     if(snapshot && typeof snapshot==='object') entry.snapshot=JSON.parse(JSON.stringify(snapshot));
     return [...previous,entry];
   }
+  function appendAttempt(attempts,attempt){
+    const previous=Array.isArray(attempts)?attempts:[];
+    if(!attempt||typeof attempt!=='object')throw new TypeError('צריך למלא תיעוד ניסיון תקין.');
+    const date=String(attempt.date||'');
+    const parsedDate=new Date(`${date}T00:00:00Z`);
+    if(!/^\d{4}-\d{2}-\d{2}$/.test(date)||Number.isNaN(parsedDate.getTime())||parsedDate.toISOString().slice(0,10)!==date)throw new TypeError('צריך לבחור תאריך תקין לניסיון.');
+    if(!['reported-success','needs-improvement','unfinished'].includes(attempt.outcome))throw new TypeError('צריך לבחור איך יצא הניסיון.');
+    const rating=attempt.rating==null||attempt.rating===''?null:Number(attempt.rating);
+    if(rating!==null&&(!Number.isInteger(rating)||rating<1||rating>5))throw new TypeError('הדירוג צריך להיות מספר שלם בין 1 ל-5.');
+    const textFields=['texture','taste','notes'];
+    for(const field of textFields)if(typeof attempt[field]!=='string'||attempt[field].length>3000)throw new TypeError('אחת ההערות ארוכה מדי או אינה תקינה.');
+    if(attempt.imageDataUrl!==undefined&&(!/^data:image\/(?:jpeg|png|webp);base64,[A-Za-z0-9+/]+={0,2}$/.test(attempt.imageDataUrl)||attempt.imageDataUrl.length>8*1024*1024))throw new TypeError('התמונה אינה תקינה או גדולה מדי.');
+    const entry={date,outcome:attempt.outcome,rating,texture:attempt.texture,taste:attempt.taste,notes:attempt.notes};
+    if(attempt.imageDataUrl)entry.imageDataUrl=attempt.imageDataUrl;
+    return [...previous,entry];
+  }
   function formatClock(seconds){
     const safe=Math.max(0,Math.ceil(Number(seconds)||0));
     return `${String(Math.floor(safe/60)).padStart(2,'0')}:${String(safe%60).padStart(2,'0')}`;
@@ -176,6 +212,8 @@
       if(r.id.length>160 || r.name.length>300 || r.category.length>100 || r.ingredients.length>500 || r.steps.length>500 || r.versions.length>500) return {ok:false,reason:'קובץ הגיבוי מכיל נתונים שחורגים מהמגבלות.'};
       if(r.ingredients.some(i=>!i || typeof i.name!=='string' || i.name.length>300 || !Number.isFinite(i.amount) || i.amount<0 || i.amount>1000000 || typeof i.unit!=='string' || i.unit.length>40 || (i.alternatives!==undefined&&(!Array.isArray(i.alternatives)||i.alternatives.length>2||i.alternatives.some(x=>typeof x!=='string'||!x.trim()||x.length>200))))) return {ok:false,reason:'קובץ הגיבוי מכיל רכיב או חלופות במבנה לא תקין.'};
       if(r.steps.some(step=>typeof step!=='string' || step.length>5000)) return {ok:false,reason:'קובץ הגיבוי מכיל שלב הכנה במבנה לא תקין.'};
+      if(r.stepPhotos!==undefined&&!validateStepPhotos(r.stepPhotos,r.steps.length)) return {ok:false,reason:'קובץ הגיבוי מכיל תמונות שלבי בישול לא תקינות.'};
+      if(r.attempts!==undefined&&(!Array.isArray(r.attempts)||r.attempts.length>500||r.attempts.some(a=>!a||typeof a!=='object'||typeof a.date!=='string'||Number.isNaN(Date.parse(a.date))||(a.rating!==undefined&&a.rating!==null&&(!Number.isInteger(a.rating)||a.rating<1||a.rating>5))||(a.outcome!==undefined&&!['reported-success','needs-improvement','unfinished'].includes(a.outcome))||['texture','taste','notes'].some(field=>a[field]!==undefined&&(typeof a[field]!=='string'||a[field].length>3000))||(a.imageDataUrl!==undefined&&(typeof a.imageDataUrl!=='string'||a.imageDataUrl.length>8*1024*1024||!/^data:image\/(?:jpeg|png|webp);base64,[A-Za-z0-9+/]+={0,2}$/.test(a.imageDataUrl))))))return {ok:false,reason:'קובץ הגיבוי מכיל תיעוד ניסיונות לא תקין.'};
       if(r.versions.some(v=>{if(!v || !Number.isInteger(v.number) || v.number<1 || typeof v.date!=='string' || typeof v.note!=='string' || v.note.length>500)return true;if(v.snapshot){const x=v.snapshot;if(typeof x!=='object'||typeof x.name!=='string'||typeof x.category!=='string'||!Number.isFinite(x.servings)||x.servings<1||!Array.isArray(x.ingredients)||!Array.isArray(x.steps)||x.ingredients.some(i=>!i||typeof i.name!=='string'||!Number.isFinite(i.amount)||i.amount<0||typeof i.unit!=='string'||(i.alternatives!==undefined&&(!Array.isArray(i.alternatives)||i.alternatives.length>2||i.alternatives.some(a=>typeof a!=='string'||!a.trim()||a.length>200))))||x.steps.some(step=>typeof step!=='string'))return true;}return false;})) return {ok:false,reason:'קובץ הגיבוי מכיל היסטוריית גרסאות לא תקינה.'};
     }
     if(typeof payload.data.profile.name!=='string' || typeof payload.data.profile.preferences!=='string' || payload.data.profile.name.length>200 || payload.data.profile.preferences.length>10000) return {ok:false,reason:'העדפות המשתמש בקובץ הגיבוי אינן תקינות.'};
@@ -187,7 +225,7 @@
     }
     return {ok:true,data:payload.data};
   }
-  const api={scaleAmount,estimateNutrition,normalizeCustomNutritionFoods,validateCustomNutritionFood,upsertCustomNutritionFood,parseIngredientLines,validateLocalVideoFile,parseTimerVoiceCommand,recommendIngredientAlternatives,matchAvoidedIngredient,appendVersion,formatClock,escapeHTML,createBackup,validateBackup};
+  const api={scaleAmount,estimateNutrition,normalizeCustomNutritionFoods,validateCustomNutritionFood,upsertCustomNutritionFood,parseIngredientLines,validateLocalVideoFile,validateLocalImageFile,validateStepPhotos,parseTimerVoiceCommand,parseCookingAssistantCommand,recommendIngredientAlternatives,matchAvoidedIngredient,appendVersion,appendAttempt,formatClock,escapeHTML,createBackup,validateBackup};
   root.MyChefDomain=api;
   if(typeof module!=='undefined'&&module.exports) module.exports=api;
 })(globalThis);
